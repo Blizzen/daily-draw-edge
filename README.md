@@ -12,8 +12,27 @@ finds them.
 
 ## Status
 
-Pre-build. Design converged via a grilling session. **MLB-first.** Spike (#1)
-**passed** against a live slate — see below.
+Design converged via a grilling session. **MLB-first.** Spike (#1) **passed**
+against a live slate. **Core odds/de-vig/rank module built and verified** against
+live odds (pure Kotlin/JVM, no Android deps — the Android app will depend on it).
+
+### Run the core
+
+```
+./gradlew test                                  # pure-logic unit tests (no network)
+./gradlew run --args="<oddsApiKey>"             # live: ranks the demo NYM@PHI hand
+```
+
+Live output ranks the real cards by EV, de-vigs two-way lines, haircuts one-sided
+alternate lines, and marks the per-team 1st-inning prop as "no data → manual".
+
+Module layout (`src/main/kotlin/online/blizzen/dailydraw/`):
+- `model/` — `Card`, `StatKey`, `Game`, `ProbEstimate`, `RankedCard`, `HandResult`
+- `odds/DeVig` — american→prob, two-way de-vig, one-sided haircut
+- `odds/OddsApi` — typed v4 client (java.net.http; key passed per-call, never stored)
+- `odds/ProbabilityEstimator` — card + odds → `ProbEstimate` (pure, unit-tested)
+- `rank/Ranker` — EV, rank, recommend 4, no-data separation
+- `Cli` — runnable smoke test
 
 ## Spike result (live, 2026-06-20 NYM@PHI)
 

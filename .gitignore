@@ -1,0 +1,18 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+*.log
+
+# Secrets / scratch — never commit API keys or fetched odds dumps
+*.key
+secrets.*
+*.local
+scratch/
