@@ -3,10 +3,8 @@ package online.blizzen.dailydraw.odds
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
+import java.net.HttpURLConnection
+import java.net.URL
 
 @Serializable
 data class EventSummary(
@@ -52,7 +50,6 @@ data class Outcome(
 class OddsApiClient(
     private val apiKey: String,
     private val region: String = "us",
-    private val http: HttpClient = HttpClient.newHttpClient(),
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val base = "https://api.the-odds-api.com/v4/sports/baseball_mlb"
@@ -60,14 +57,24 @@ class OddsApiClient(
     var lastRequestsRemaining: String? = null
         private set
 
+    // HttpURLConnection so :core stays portable across the JVM CLI and Android
+    // (Android has no java.net.http package).
     private fun get(url: String): String {
-        val req = HttpRequest.newBuilder(URI.create(url)).GET().build()
-        val resp = http.send(req, HttpResponse.BodyHandlers.ofString())
-        lastRequestsRemaining = resp.headers().firstValue("x-requests-remaining").orElse(null)
-        require(resp.statusCode() in 200..299) {
-            "Odds API ${resp.statusCode()}: ${resp.body().take(300)}"
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            readTimeout = 15_000
         }
-        return resp.body()
+        try {
+            val code = conn.responseCode
+            lastRequestsRemaining = conn.getHeaderField("x-requests-remaining")
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val body = stream?.bufferedReader()?.use { it.readText() } ?: ""
+            require(code in 200..299) { "Odds API $code: ${body.take(300)}" }
+            return body
+        } finally {
+            conn.disconnect()
+        }
     }
 
     fun listEvents(): List<EventSummary> =

@@ -3,6 +3,9 @@
 build/
 !gradle/wrapper/gradle-wrapper.jar
 
+# Android local SDK path (machine-specific)
+local.properties
+
 # IDE
 .idea/
 *.iml

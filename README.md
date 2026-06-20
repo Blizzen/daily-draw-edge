@@ -13,26 +13,35 @@ finds them.
 ## Status
 
 Design converged via a grilling session. **MLB-first.** Spike (#1) **passed**
-against a live slate. **Core odds/de-vig/rank module built and verified** against
-live odds (pure Kotlin/JVM, no Android deps — the Android app will depend on it).
+against a live slate. **Core logic + a buildable Android app both done.** The full
+chain (record → OCR → parse → odds → de-vig → EV rank) is wired end-to-end; the
+APK builds. On-device capture/OCR is pending real-hardware verification.
 
-### Run the core
+### Modules
+
+- **`:core`** — pure Kotlin/JVM, no Android deps. The whole brain, unit-tested.
+  - `model/` — `Card`, `StatKey`, `Game`, `ProbEstimate`, `RankedCard`, `HandResult`
+  - `odds/DeVig` — american→prob, two-way de-vig, one-sided haircut
+  - `odds/OddsApi` — typed v4 client (`HttpURLConnection`; key passed per-call, never stored)
+  - `odds/ProbabilityEstimator` — card + odds → `ProbEstimate`
+  - `parse/PropParser` — OCR text → `Card`; `parse/MatchupResolver` — header → `Game`
+  - `rank/Ranker` — EV, rank, recommend 4, no-data separation
+  - `Cli` — runnable smoke test
+- **`:app`** — Android (Kotlin + Compose), depends on `:core`.
+  - `MainActivity` + Compose UI (API-key field, record/stop, results)
+  - `capture/CaptureService` — MediaProjection → MediaRecorder mp4 (foreground)
+  - `capture/FrameExtractor` — samples frames; `capture/CardOcr` — ML Kit OCR + parse + dedupe
+  - `CaptureViewModel` — orchestrates extract → OCR → odds → rank
+
+### Build / run
 
 ```
-./gradlew test                                  # pure-logic unit tests (no network)
-./gradlew run --args="<oddsApiKey>"             # live: ranks the demo NYM@PHI hand
+./gradlew :core:test                            # 21 pure-logic unit tests (no network)
+./gradlew :core:run --args="<oddsApiKey>"       # live: ranks the demo NYM@PHI hand
+./gradlew :app:assembleDebug                    # builds app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Live output ranks the real cards by EV, de-vigs two-way lines, haircuts one-sided
-alternate lines, and marks the per-team 1st-inning prop as "no data → manual".
-
-Module layout (`src/main/kotlin/online/blizzen/dailydraw/`):
-- `model/` — `Card`, `StatKey`, `Game`, `ProbEstimate`, `RankedCard`, `HandResult`
-- `odds/DeVig` — american→prob, two-way de-vig, one-sided haircut
-- `odds/OddsApi` — typed v4 client (java.net.http; key passed per-call, never stored)
-- `odds/ProbabilityEstimator` — card + odds → `ProbEstimate` (pure, unit-tested)
-- `rank/Ranker` — EV, rank, recommend 4, no-data separation
-- `Cli` — runnable smoke test
+Requires an Android SDK; set its path in `local.properties` (`sdk.dir=...`, gitignored).
 
 ## Spike result (live, 2026-06-20 NYM@PHI)
 

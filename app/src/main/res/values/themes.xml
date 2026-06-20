@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Host theme only needs to be no-action-bar; Compose MaterialTheme owns the UI. -->
+    <style name="Theme.DailyDrawEdge" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
