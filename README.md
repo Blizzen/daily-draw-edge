@@ -1,54 +1,92 @@
 # Daily Draw Edge
 
 Android companion for Yahoo's **Daily Draw** card game. Scans the 6 cards you're
-dealt, computes each card's expected points (`displayed points × P(yes)`), and
-recommends the best 4 to pick.
+dealt for a single game, computes each card's expected points
+(`displayed points × P(yes)`), and recommends the best 4 to pick.
 
-The game deals 6 cards, each a **yes/no player prop** (e.g. "WILL RECORD 2+
-TACKLES", "WILL HAVE A SHOT ON TARGET") worth some points, with optional 1.25× /
-1.5× boosts. You pick 4. Score = points for the props that hit. The optimal play
-is to pick the 4 cards maximizing expected points — this app finds them, and
-surfaces the "outlier" cards where the points are generous relative to the true
-probability.
+Each Daily Draw is tied to **one match**: 6 cards, each a **yes/no prop** (team-
+or player-level) worth some points, with optional 1.25× / 1.5× boosts. You pick 4;
+the set locks at that game's first pitch / kickoff. Score = points for the props
+that hit. Optimal play = pick the 4 cards maximizing expected points — this app
+finds them.
 
 ## Status
 
-Pre-build. Design locked via a grilling session; feasibility spike next.
+Pre-build. Design converged via a grilling session. **MLB-first.** Next step is
+the feasibility spike (#1).
 
-## Design decisions (locked)
+## v1 scope — MLB, market-driven
+
+For MLB, mainstream odds APIs cover the card prop types well, so v1 is essentially
+an odds-lookup pipeline with **no stats model**:
+
+```
+record carousel (MediaProjection)
+  → sample frames @ ~5fps, ML Kit OCR, drop blur/partials, dedupe → 6 cards
+  → parse each card → (subject, stat, comparator, line)
+  → read header → identify the single game (team abbrevs + time are text)
+  → look up de-vigged book odds for each prop  → P(yes)
+  → EV = points × P(yes); rank 6, recommend top 4
+  → cards with no market → 'no data', surfaced for manual judgment
+```
+
+No stats model, no lineup feed, no `StatsProvider`, no logging in v1.
+
+## Card anatomy (from real screenshots)
+
+- **Header** (MLB): `NYM 34-41 · TODAY 6:15 PM · PHI 40-35` (text — easy match
+  resolution). `Max` = sum of your 4 selected cards' points.
+- **Big point value** (e.g. `5.25 Points`) + optional boost subtitle
+  (`3.5 POINTS · 1.5X MULTIPLIER`). Displayed points already include the boost.
+- **Two subject types:**
+  - **Team card** — team logo + record pill (`Mets · 34-41`); team-level prop.
+  - **Player card** — photo + `Name · POS · #num` pill; player prop.
+- **Prop line** — always a yes/no threshold.
+- Card color = rarity/boost. Carousel: one card at a time; soccer screens look
+  identical minus the text header (flags instead of team abbrevs).
+
+### Observed MLB prop types
+| Prop text | Normalized | Likely market |
+|-----------|-----------|---------------|
+| WILL SCORE 4+ RUNS (team) | team runs ≥ 4 | team total runs O3.5 |
+| WILL SCORE A RUN IN THE 1ST INNING (team) | 1st-inning run = yes | 1st-inning team total O0.5 |
+| WILL HIT A HOME RUN (player) | HR ≥ 1 | anytime HR |
+| WILL RECORD 3+ COMBINED HITS + RUNS + RBIS (player) | H+R+RBI ≥ 3 | H+R+RBI prop |
+
+## Decisions (locked)
 
 | Area | Decision |
 |------|----------|
-| **Card input** | Screen recording → in-app **MediaProjection** capture; app decodes the clip, finds the 6 settled (stationary) frames, OCRs each, dedupes by player+prop |
-| **Card anatomy** | matchup flags · big point value · optional boost subtitle (`3 POINTS · 1.5X MULTIPLIER`) · player photo · name pill (`Name · POS · #num` + country) · prop line. All props are yes/no thresholds |
-| **Odds source** | Spike first: try an odds **API**, then test **scraping**, to determine plausibility for the actual prop types |
-| **Missing odds** | **Stats-model fallback** — estimate P(yes) from player per-90 stats (Poisson/empirical). Likely the *primary* path for niche soccer shot/tackle props |
-| **Stats source** | **Per-sport mix** behind a common `StatsProvider` interface (e.g. FBref soccer, MLB stats API for baseball) |
-| **Availability** | **Start-prob weighted**: `P(yes) = P(plays enough) × P(yes \| plays)`. Needs predicted-lineup / recent-starts data per player |
-| **Output** | **EV-rank all 6, recommend the top 4.** Raw points + implied % shown underneath |
-| **Reroll** | Passive **re-rank only** in v1 (you decide what to reroll, re-scan, it re-ranks). Optimal keep/reroll advisor deferred |
-| **Logging** | **None in v1** |
-| **OCR** | **ML Kit on-device** text recognition (free, offline; card text is large clean rendered type) |
-| **Tech stack** | **Native Kotlin + Jetpack Compose** (first-class MediaProjection / MediaCodec / ML Kit access) |
-| **Architecture** | **Decide after the spike** — feasibility (esp. whether scraping needs a server IP) dictates on-device vs phone+backend |
+| **First sport** | **MLB-first** end-to-end; soccer/others later |
+| **Card input** | Screen recording via in-app **MediaProjection** |
+| **Frame extraction** | Sample ~5fps → ML Kit OCR → drop low-confidence → dedupe by subject+prop → 6 cards |
+| **OCR** | **ML Kit on-device** |
+| **Prop parsing** | **Regex grammar + stat dictionary**; detect team-vs-player subject from the pill; unknown stat noun → flag for manual |
+| **Entity/match** | Read text header to identify the single game; team cards → team, player cards → that game's roster |
+| **Probability** | **Market-only for MLB v1** — de-vigged book odds (multiplicative de-vig from the two-way prop). No model |
+| **Missing odds** | Mark **'no data'**; rank the rest; if <4 rankable, prompt manual fill from unknowns |
+| **Output** | EV-rank all 6, recommend top 4; raw points + % shown; no-data cards surfaced for manual |
+| **Reroll** | Passive re-rank (re-scan after reroll) |
+| **Outlier scope** | Relative EV only in v1 (absolute mispricing-curve detection needs logging — deferred) |
+| **Logging** | None in v1 |
+| **Tech stack** | Native **Kotlin + Jetpack Compose** |
+| **Architecture** | Decide after the spike (market-only likely fits all-on-device) |
+
+## Deferred (post-v1)
+
+- **Soccer / other sports** via per-sport `StatsProvider` interface.
+- **Stats model** — Poisson from per-90 rate; sample = recency-weighted blend of
+  club + international; **start-prob weighted** `P(yes)=P(plays)×P(yes|plays)`
+  from confirmed lineups. (Needed where odds are thin — i.e. soccer.)
+- **Outlier / pricing-curve detection** via logging `(points, %, sport, prop)`.
+- **Reroll optimizer** (optimal keep/reroll once an EV distribution is learned).
 
 ## Game mechanics reference
 
-- 6 cards dealt, shown one at a time in a carousel; move up to 4 to the top slots.
-- **Reroll once:** rerolls only the *unselected* (bottom) cards; kept cards are
-  safe. Can swap/rearrange after the reroll before finalizing.
-- Boost multipliers (1.25× / 1.5×) shown as a subtitle; card color indicates
-  rarity/boost.
-- Sports seen: all majors + soccer. Currently MLB and FIFA World Cup.
-
-## Open design questions (next grilling branches)
-
-- Settled-frame detection heuristic (frame-diff threshold, dwell detection)
-- Player/entity resolution (OCR name + POS + #num + country → stats source ID)
-- Predicted-lineup / start-probability data source per sport
-- Probability model details (sample window, de-vig when book odds exist)
-- Spike plan: which odds API, scrape targets, success criteria
-- min SDK (target device: Galaxy S24+, One UI 8.5, Android 16)
+- One Daily Draw per game; all 6 cards from that game; locks at game start.
+- **Reroll once:** rerolls only unselected (bottom) cards; kept cards safe; can
+  swap after reroll before finalizing.
+- Sports seen: majors + soccer. Currently MLB and FIFA World Cup.
 
 ## Target device
 
