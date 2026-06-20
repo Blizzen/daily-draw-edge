@@ -12,8 +12,27 @@ finds them.
 
 ## Status
 
-Pre-build. Design converged via a grilling session. **MLB-first.** Next step is
-the feasibility spike (#1).
+Pre-build. Design converged via a grilling session. **MLB-first.** Spike (#1)
+**passed** against a live slate — see below.
+
+## Spike result (live, 2026-06-20 NYM@PHI)
+
+Ran real Odds API calls against the exact cards. Pipeline works end-to-end.
+
+| Card (real) | pts | P(yes) | EV | source |
+|---|---|---|---|---|
+| Mets 4+ runs | 5.25 | 43.7% | 2.29 | 2-way de-vig (BetMGM O+115/U-150) |
+| Crawford 3+ H+R+RBI | 6.75 | 26.0% | 1.75 | raw 1-sided (DK O+285), vig-inflated |
+| Alvarez HR | 5.50 | 15.4% | 0.85 | raw 1-sided (BetRivers O+550), vig-inflated |
+| Phillies run in 1st inning | 5.00 | — | — | NO DATA (no per-team 1st-inning market) |
+
+Findings:
+- **All 4 prop families have live markets** (alt team totals, batter HR, batter
+  H+R+RBI, 1st-inning) across DK/FanDuel/BetMGM/BetRivers.
+- **Threshold lines often land on *alternate* markets posted ONE-SIDED (Over
+  only)** → can't two-way de-vig; use raw implied + vig haircut or consensus.
+- **Per-team 1st-inning run = genuine gap** → "no data → manual" (as designed).
+- **Free tier ample** — whole test cost ~4 credits of 500/mo.
 
 ## v1 scope — MLB, market-driven
 
@@ -63,7 +82,7 @@ No stats model, no lineup feed, no `StatsProvider`, no logging in v1.
 | **OCR** | **ML Kit on-device** |
 | **Prop parsing** | **Regex grammar + stat dictionary**; detect team-vs-player subject from the pill; unknown stat noun → flag for manual |
 | **Entity/match** | Read text header to identify the single game; team cards → team, player cards → that game's roster |
-| **Probability** | **Market-only for MLB v1** — de-vigged book odds (multiplicative de-vig from the two-way prop). No model |
+| **Probability** | **Market-only for MLB v1** — book odds. Two-way standard lines → multiplicative de-vig. **One-sided alternate lines → raw implied with vig haircut / multi-book consensus** (spike finding). No model |
 | **Missing odds** | Mark **'no data'**; rank the rest; if <4 rankable, prompt manual fill from unknowns |
 | **Output** | EV-rank all 6, recommend top 4; raw points + % shown; no-data cards surfaced for manual |
 | **Reroll** | Passive re-rank (re-scan after reroll) |
