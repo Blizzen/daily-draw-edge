@@ -8,9 +8,12 @@ import online.blizzen.dailydraw.odds.EventOdds
 import online.blizzen.dailydraw.odds.Market
 import online.blizzen.dailydraw.odds.Outcome
 import online.blizzen.dailydraw.odds.ProbabilityEstimator
+import online.blizzen.dailydraw.parse.ParseOutcome
+import online.blizzen.dailydraw.parse.PropParser
 import online.blizzen.dailydraw.rank.Ranker
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -80,5 +83,25 @@ class PipelineTest {
         assertEquals("Francisco Alvarez", r.ranked[2].card.subjectName)
         assertTrue(r.ranked[0].ev!! > r.ranked[1].ev!!)
         assertEquals(1, r.manualFillNeeded) // only 3 priced, need 1 manual
+    }
+
+    /** Full chain: OCR text -> PropParser -> Card -> Ranker, no network. */
+    @Test fun endToEndFromOcrText() {
+        val ocrCards = listOf(
+            "5.25 Points\n3.5 POINTS • 1.5X MULTIPLIER\nMets\n34 - 41\nWILL SCORE 4+ RUNS",
+            "6.75 Points\n4.5 POINTS • 1.5X MULTIPLIER\nJustin Crawford\nCF • #2\nWILL RECORD 3+ COMBINED\nHITS + RUNS + RBIS",
+            "5 Points\n4 POINTS • 1.25X MULTIPLIER\nPhillies\n40 - 35\nWILL SCORE A RUN IN THE 1ST\nINNING",
+            "5.5 Points\nFrancisco Alvarez\nC • #4\nWILL HIT A HOME RUN",
+        )
+        val parser = PropParser()
+        val cards = ocrCards.map {
+            val o = parser.parse(it)
+            assertIs<ParseOutcome.Parsed>(o, "failed to parse: $it")
+            o.card
+        }
+        val r = Ranker(est).rank(cards, spikeOdds)
+        assertEquals(listOf("Mets", "Justin Crawford", "Francisco Alvarez"),
+            r.ranked.map { it.card.subjectName })
+        assertEquals(1, r.noData.size) // 1st-inning prop
     }
 }
