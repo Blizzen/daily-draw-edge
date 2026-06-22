@@ -12,10 +12,22 @@ finds them.
 
 ## Status
 
-Design converged via a grilling session. **MLB-first.** Spike (#1) **passed**
-against a live slate. **Core logic + a buildable Android app both done.** The full
-chain (record → OCR → parse → odds → de-vig → EV rank) is wired end-to-end; the
-APK builds. On-device capture/OCR is pending real-hardware verification.
+Design converged via a grilling session. **MLB + World Cup soccer.** Both odds
+spikes passed against live slates. **Core logic + a buildable Android app done.**
+The full chain (record → OCR → parse → odds → de-vig → EV rank) is wired end-to-end
+and verified live for both sports via the CLI. On-device capture/OCR is pending
+real-hardware verification.
+
+### Sports
+
+- **MLB** (market-only): team totals, anytime HR, H+R+RBI. Matchup auto-read from
+  the header text. Per-team 1st-inning run = no-data.
+- **World Cup soccer** (market-only): `player_shots`, `player_shots_on_target`
+  (one-sided alt lines → haircut). Tackles = no market anywhere → no-data. Cards
+  show flag images (no team text), so the **match is picked manually** from the
+  day's fixtures.
+
+Sport is inferred automatically from the parsed cards' stat types.
 
 ### Modules
 

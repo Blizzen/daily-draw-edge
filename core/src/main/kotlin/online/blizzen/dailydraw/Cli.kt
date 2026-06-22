@@ -4,6 +4,7 @@ import online.blizzen.dailydraw.model.Card
 import online.blizzen.dailydraw.model.Game
 import online.blizzen.dailydraw.model.HandResult
 import online.blizzen.dailydraw.model.ProbMethod
+import online.blizzen.dailydraw.model.Sport
 import online.blizzen.dailydraw.model.StatKey
 import online.blizzen.dailydraw.odds.OddsApiClient
 import online.blizzen.dailydraw.rank.Ranker
@@ -22,15 +23,29 @@ fun main(args: Array<String>) {
         return
     }
 
-    val game = Game(awayTeam = "Mets", homeTeam = "Phillies")
-    val hand = listOf(
-        Card("Mets", StatKey.TEAM_RUNS, threshold = 4, displayedPoints = 5.25, rawPropText = "WILL SCORE 4+ RUNS"),
-        Card("Justin Crawford", StatKey.BATTER_HITS_RUNS_RBIS, threshold = 3, displayedPoints = 6.75, rawPropText = "WILL RECORD 3+ COMBINED HITS + RUNS + RBIS"),
-        Card("Phillies", StatKey.TEAM_RUN_FIRST_INNING, threshold = 1, displayedPoints = 5.0, rawPropText = "WILL SCORE A RUN IN THE 1ST INNING"),
-        Card("Francisco Alvarez", StatKey.BATTER_HOME_RUNS, threshold = 1, displayedPoints = 5.5, rawPropText = "WILL HIT A HOME RUN"),
-    )
+    val soccer = args.getOrNull(1)?.lowercase() in setOf("wc", "soccer")
+    val sport = if (soccer) Sport.WORLD_CUP else Sport.MLB
+    val game: Game
+    val hand: List<Card>
+    if (soccer) {
+        game = Game(awayTeam = "Iraq", homeTeam = "France")
+        hand = listOf(
+            Card("Kylian Mbappe", StatKey.PLAYER_SHOTS_ON_TARGET, threshold = 1, displayedPoints = 4.5, rawPropText = "WILL HAVE A SHOT ON TARGET"),
+            Card("Ousmane Dembele", StatKey.PLAYER_SHOTS, threshold = 1, displayedPoints = 3.0, rawPropText = "WILL ATTEMPT A SHOT"),
+            Card("Maxence Lacroix", StatKey.PLAYER_SHOTS, threshold = 2, displayedPoints = 5.5, rawPropText = "WILL ATTEMPT 2+ SHOTS"),
+            Card("Adam Diallo", StatKey.PLAYER_TACKLES, threshold = 2, displayedPoints = 4.0, rawPropText = "WILL RECORD 2+ TACKLES"),
+        )
+    } else {
+        game = Game(awayTeam = "Mets", homeTeam = "Phillies")
+        hand = listOf(
+            Card("Mets", StatKey.TEAM_RUNS, threshold = 4, displayedPoints = 5.25, rawPropText = "WILL SCORE 4+ RUNS"),
+            Card("Justin Crawford", StatKey.BATTER_HITS_RUNS_RBIS, threshold = 3, displayedPoints = 6.75, rawPropText = "WILL RECORD 3+ COMBINED HITS + RUNS + RBIS"),
+            Card("Phillies", StatKey.TEAM_RUN_FIRST_INNING, threshold = 1, displayedPoints = 5.0, rawPropText = "WILL SCORE A RUN IN THE 1ST INNING"),
+            Card("Francisco Alvarez", StatKey.BATTER_HOME_RUNS, threshold = 1, displayedPoints = 5.5, rawPropText = "WILL HIT A HOME RUN"),
+        )
+    }
 
-    val client = OddsApiClient(apiKey)
+    val client = OddsApiClient(apiKey, sport)
     val event = client.findEvent(game) ?: run {
         System.err.println("No event found for ${game.awayTeam} @ ${game.homeTeam} today.")
         return

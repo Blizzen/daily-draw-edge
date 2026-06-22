@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,6 +28,7 @@ import online.blizzen.dailydraw.app.capture.CaptureService
 import online.blizzen.dailydraw.model.HandResult
 import online.blizzen.dailydraw.model.ProbMethod
 import online.blizzen.dailydraw.model.RankedCard
+import online.blizzen.dailydraw.odds.EventSummary
 
 class MainActivity : ComponentActivity() {
 
@@ -135,6 +137,7 @@ private fun AppScreen(
                 is UiState.Processing -> Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(20.dp)); Spacer(Modifier.width(12.dp)); Text(s.step)
                 }
+                is UiState.PickMatch -> MatchPicker(s, onPick = vm::pickEvent)
                 is UiState.Error -> {
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp)) {
@@ -145,6 +148,28 @@ private fun AppScreen(
                     TextButton(onReset) { Text("Try again") }
                 }
                 is UiState.Results -> ResultsView(s, onReset)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MatchPicker(s: UiState.PickMatch, onPick: (EventSummary) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Pick the match (${s.sport.name})", style = MaterialTheme.typography.titleSmall)
+        Text("Soccer cards show flags, not text — tap the game these cards are from.",
+            style = MaterialTheme.typography.bodySmall)
+        s.events.forEach { e ->
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(e) }
+                        .padding(12.dp)
+                ) {
+                    Text("${e.awayTeam} @ ${e.homeTeam}", style = MaterialTheme.typography.titleSmall)
+                    Text(e.commenceTime, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }

@@ -11,8 +11,12 @@ import kotlinx.coroutines.withContext
 import online.blizzen.dailydraw.app.capture.CaptureBus
 import online.blizzen.dailydraw.app.capture.CardOcr
 import online.blizzen.dailydraw.app.capture.FrameExtractor
+import online.blizzen.dailydraw.model.Card
 import online.blizzen.dailydraw.model.Game
 import online.blizzen.dailydraw.model.HandResult
+import online.blizzen.dailydraw.model.Sport
+import online.blizzen.dailydraw.model.dominantSport
+import online.blizzen.dailydraw.odds.EventSummary
 import online.blizzen.dailydraw.odds.OddsApiClient
 import online.blizzen.dailydraw.rank.Ranker
 
@@ -20,6 +24,7 @@ sealed interface UiState {
     data object Idle : UiState
     data object Recording : UiState
     data class Processing(val step: String) : UiState
+    data class PickMatch(val sport: Sport, val events: List<EventSummary>) : UiState
     data class Results(
         val game: Game?,
         val result: HandResult,
@@ -37,6 +42,11 @@ class CaptureViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _apiKey = MutableStateFlow(prefs.getString(KEY_API, "") ?: "")
     val apiKey = _apiKey.asStateFlow()
+
+    // Held between OCR and a manual match pick (soccer has no OCR-able matchup).
+    private var pendingCards: List<Card> = emptyList()
+    private var pendingSport: Sport = Sport.MLB
+    private var pendingUnparsed: List<String> = emptyList()
 
     init {
         viewModelScope.launch {
@@ -71,30 +81,56 @@ class CaptureViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value = UiState.Processing("Reading ${frames.size} frames…")
                 val scan = withContext(Dispatchers.Default) { CardOcr().scan(frames) }
                 if (scan.cards.isEmpty()) {
-                    _ui.value = UiState.Error("No cards recognized (parsed 0). Unparsed: ${scan.unparsedSamples.take(3)}")
+                    _ui.value = UiState.Error("No cards recognized. Unparsed: ${scan.unparsedSamples.take(3)}")
                     return@launch
                 }
+                val sport = scan.cards.dominantSport()
+                    ?: run { _ui.value = UiState.Error("Couldn't tell the sport from ${scan.cards.size} cards"); return@launch }
 
                 val key = _apiKey.value.trim()
-                if (key.isEmpty()) { _ui.value = UiState.Error("Enter an Odds API key to price cards (${scan.cards.size} cards read)"); return@launch }
-                val game = scan.game ?: run {
-                    _ui.value = UiState.Error("Couldn't read the matchup header (${scan.cards.size} cards read)")
-                    return@launch
-                }
+                if (key.isEmpty()) { _ui.value = UiState.Error("Enter an Odds API key (${scan.cards.size} cards read)"); return@launch }
 
-                _ui.value = UiState.Processing("Fetching odds for ${game.awayTeam} @ ${game.homeTeam}…")
-                val result = withContext(Dispatchers.IO) {
-                    val client = OddsApiClient(key)
-                    val event = client.findEvent(game) ?: error("No odds event for ${game.awayTeam} @ ${game.homeTeam}")
-                    val markets = scan.cards.flatMap { it.stat.marketKeys }.toSet()
-                    val odds = client.eventOdds(event.id, markets)
-                    Ranker().rank(scan.cards, odds)
+                pendingCards = scan.cards
+                pendingSport = sport
+                pendingUnparsed = scan.unparsedSamples
+
+                // MLB: try to resolve the matchup from the OCR'd header.
+                val game = scan.game
+                if (game != null) {
+                    _ui.value = UiState.Processing("Finding ${game.awayTeam} @ ${game.homeTeam}…")
+                    val event = withContext(Dispatchers.IO) { OddsApiClient(key, sport).findEvent(game) }
+                    if (event != null) { priceAndRank(key, sport, event); return@launch }
                 }
-                _ui.value = UiState.Results(game, result, scan.unparsedSamples)
+                // Otherwise (soccer, or header miss): let the user pick today's match.
+                _ui.value = UiState.Processing("Loading ${sport.name} fixtures…")
+                val events = withContext(Dispatchers.IO) { OddsApiClient(key, sport).listEvents() }
+                if (events.isEmpty()) { _ui.value = UiState.Error("No ${sport.name} fixtures found today"); return@launch }
+                _ui.value = UiState.PickMatch(sport, events)
             } catch (t: Throwable) {
                 _ui.value = UiState.Error(t.message ?: "processing failed")
             }
         }
+    }
+
+    fun pickEvent(event: EventSummary) {
+        viewModelScope.launch {
+            try {
+                priceAndRank(_apiKey.value.trim(), pendingSport, event)
+            } catch (t: Throwable) {
+                _ui.value = UiState.Error(t.message ?: "pricing failed")
+            }
+        }
+    }
+
+    private suspend fun priceAndRank(key: String, sport: Sport, event: EventSummary) {
+        _ui.value = UiState.Processing("Fetching odds for ${event.awayTeam} @ ${event.homeTeam}…")
+        val result = withContext(Dispatchers.IO) {
+            val client = OddsApiClient(key, sport)
+            val markets = pendingCards.flatMap { it.stat.marketKeys }.toSet()
+            val odds = client.eventOdds(event.id, markets)
+            Ranker().rank(pendingCards, odds)
+        }
+        _ui.value = UiState.Results(Game(event.awayTeam, event.homeTeam), result, pendingUnparsed)
     }
 
     companion object { private const val KEY_API = "odds_api_key" }

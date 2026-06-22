@@ -49,10 +49,11 @@ data class Outcome(
  */
 class OddsApiClient(
     private val apiKey: String,
+    private val sport: online.blizzen.dailydraw.model.Sport = online.blizzen.dailydraw.model.Sport.MLB,
     private val region: String = "us",
 ) {
     private val json = Json { ignoreUnknownKeys = true }
-    private val base = "https://api.the-odds-api.com/v4/sports/baseball_mlb"
+    private val base = "https://api.the-odds-api.com/v4/sports/${sport.oddsApiKey}"
 
     var lastRequestsRemaining: String? = null
         private set

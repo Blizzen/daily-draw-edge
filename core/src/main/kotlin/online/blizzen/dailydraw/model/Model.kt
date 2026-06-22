@@ -1,26 +1,41 @@
 package online.blizzen.dailydraw.model
 
+/** A Daily Draw sport, with its Odds API sport key. */
+enum class Sport(val oddsApiKey: String) {
+    MLB("baseball_mlb"),
+    WORLD_CUP("soccer_fifa_world_cup"),
+}
+
 /**
  * The stat a card's prop is about, plus the Odds API market keys it maps to.
  * Markets are tried in order (standard line first, then alternate).
  *
  * Threshold props are "N+" yes/no events, scored against an Over (N - 0.5) line.
  * Markets with an empty list are known coverage gaps (e.g. per-team 1st-inning
- * run) and always resolve to "no data" -> manual judgement.
+ * run, soccer tackles) and always resolve to "no data" -> manual judgement.
  */
 enum class StatKey(
     val marketKeys: List<String>,
     val subjectIsPlayer: Boolean,
+    val sport: Sport,
 ) {
-    TEAM_RUNS(listOf("team_totals", "alternate_team_totals"), subjectIsPlayer = false),
-    BATTER_HOME_RUNS(listOf("batter_home_runs", "batter_home_runs_alternate"), subjectIsPlayer = true),
+    // --- MLB ---
+    TEAM_RUNS(listOf("team_totals", "alternate_team_totals"), subjectIsPlayer = false, sport = Sport.MLB),
+    BATTER_HOME_RUNS(listOf("batter_home_runs", "batter_home_runs_alternate"), subjectIsPlayer = true, sport = Sport.MLB),
     BATTER_HITS_RUNS_RBIS(
         listOf("batter_hits_runs_rbis", "batter_hits_runs_rbis_alternate"),
-        subjectIsPlayer = true,
+        subjectIsPlayer = true, sport = Sport.MLB,
     ),
 
     /** No per-team 1st-inning market exists in The Odds API (spike finding). */
-    TEAM_RUN_FIRST_INNING(emptyList(), subjectIsPlayer = false),
+    TEAM_RUN_FIRST_INNING(emptyList(), subjectIsPlayer = false, sport = Sport.MLB),
+
+    // --- World Cup soccer (one-sided alt lines; spike-confirmed) ---
+    PLAYER_SHOTS(listOf("player_shots"), subjectIsPlayer = true, sport = Sport.WORLD_CUP),
+    PLAYER_SHOTS_ON_TARGET(listOf("player_shots_on_target"), subjectIsPlayer = true, sport = Sport.WORLD_CUP),
+
+    /** No tackles market exists in The Odds API for soccer (spike finding). */
+    PLAYER_TACKLES(emptyList(), subjectIsPlayer = true, sport = Sport.WORLD_CUP),
 }
 
 /** The two teams in the single game a Daily Draw is tied to. */
@@ -82,3 +97,7 @@ data class HandResult(
 
     companion object { const val PICK_COUNT = 4 }
 }
+
+/** The sport a parsed hand belongs to: the most common card stat's sport. */
+fun List<Card>.dominantSport(): Sport? =
+    groupingBy { it.stat.sport }.eachCount().maxByOrNull { it.value }?.key

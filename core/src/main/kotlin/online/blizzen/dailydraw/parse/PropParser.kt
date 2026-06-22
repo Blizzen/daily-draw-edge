@@ -143,12 +143,15 @@ class PropParser(private val rules: List<PropRule> = DEFAULT_RULES) {
     companion object {
         /** Order matters: specific phrases before general ones. */
         val DEFAULT_RULES: List<PropRule> = listOf(
+            // MLB
             PropRule(Regex("1ST INNING|FIRST INNING"), StatKey.TEAM_RUN_FIRST_INNING),
             PropRule(Regex("HITS.*RUNS.*RBIS|HITS \\+ RUNS \\+ RBIS"), StatKey.BATTER_HITS_RUNS_RBIS),
             PropRule(Regex("HOME RUN"), StatKey.BATTER_HOME_RUNS),
             PropRule(Regex("\\bRUNS?\\b"), StatKey.TEAM_RUNS),
-            // recognized but unsupported in MLB-first v1 (soccer):
-            PropRule(Regex("TACKLE|SHOT ON TARGET|\\bSHOTS?\\b"), null, supported = false, note = "soccer"),
+            // Soccer (World Cup). "shot on target" must precede the bare "shot" rule.
+            PropRule(Regex("SHOTS? ON TARGET|ON TARGET"), StatKey.PLAYER_SHOTS_ON_TARGET),
+            PropRule(Regex("\\bSHOTS?\\b"), StatKey.PLAYER_SHOTS),
+            PropRule(Regex("TACKLES?"), StatKey.PLAYER_TACKLES),
         )
     }
 }

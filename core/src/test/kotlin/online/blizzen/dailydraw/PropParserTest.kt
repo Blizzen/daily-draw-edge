@@ -79,17 +79,42 @@ class PropParserTest {
         assertEquals(5.5, r.card.displayedPoints, 1e-9)
     }
 
-    // --- soccer prop is recognized but unsupported in v1 ---
+    // --- soccer (World Cup) cards ---
 
-    @Test fun soccerPropFlaggedUnsupported() {
-        val r = parser.parse("""
-            3 Points
-            Amad Diallo
-            FWD • #15
-            WILL RECORD 2+ TACKLES
+    @Test fun soccerShotOnTarget() {
+        val r = parsed("""
+            4.5 Points
+            3 POINTS • 1.5X MULTIPLIER
+            Leroy Sane
+            MID • #19
+            WILL HAVE A SHOT ON TARGET
         """.trimIndent())
-        assertIs<ParseOutcome.Unparsed>(r)
-        assertTrue(r.reason.contains("soccer"), "reason: ${r.reason}")
+        assertEquals("Leroy Sane", r.card.subjectName)
+        assertEquals(StatKey.PLAYER_SHOTS_ON_TARGET, r.card.stat)
+        assertEquals(1, r.card.threshold)          // "A" -> 1 -> Over 0.5
+        assertEquals(0.5, r.card.overPoint, 1e-9)
+        assertEquals(4.5, r.card.displayedPoints, 1e-9)
+    }
+
+    @Test fun soccerTwoPlusShots() {
+        val r = parsed("4.5 Points\n3 POINTS • 1.5X MULTIPLIER\nLeon Goretzka\nMID • #8\nWILL ATTEMPT 2+ SHOTS")
+        assertEquals(StatKey.PLAYER_SHOTS, r.card.stat)
+        assertEquals(2, r.card.threshold)          // "2+" -> Over 1.5
+        assertEquals(1.5, r.card.overPoint, 1e-9)
+    }
+
+    @Test fun soccerAttemptAShot() {
+        val r = parsed("3 Points\nNico Schlotterbeck\nDEF • #15\nWILL ATTEMPT A SHOT")
+        assertEquals(StatKey.PLAYER_SHOTS, r.card.stat)
+        assertEquals(1, r.card.threshold)
+    }
+
+    @Test fun soccerTacklesParseButAreACoverageGap() {
+        // Tackles parse to a Card, but PLAYER_TACKLES has no market -> priced as no-data.
+        val r = parsed("3 Points\nAmad Diallo\nFWD • #15\nWILL RECORD 2+ TACKLES")
+        assertEquals(StatKey.PLAYER_TACKLES, r.card.stat)
+        assertEquals(2, r.card.threshold)
+        assertTrue(r.card.stat.marketKeys.isEmpty())
     }
 
     // --- failure modes ---
